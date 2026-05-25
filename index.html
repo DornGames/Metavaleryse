@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>总统府</title>
+</head>
+<body style="margin:0;overflow:hidden;background:#1a1a2e;">
+<canvas id="gameCanvas"></canvas>
+<div id="debug" style="position:fixed;top:10px;left:10px;color:#0ff;font-size:13px;background:rgba(0,0,0,0.7);padding:8px 12px;border-radius:4px;z-index:1000;font-family:'Courier New',monospace;"></div>
+<script src="player_sprite.js"></script>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const debug = document.getElementById('debug');
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const TILE = 32;
+const MAP_W = 180;
+const MAP_H = 180;
+
+const T = { GRASS: 0, ROAD: 1, BUILDING: 2 };
+const MAP = [];
+const BUILDINGS = [];
+const LABELS = [];
+
+// 生成地图
+for (let y = 0; y < MAP_H; y++) {
+    MAP[y] = [];
+    for (let x = 0; x < MAP_W; x++) {
+        MAP[y][x] = T.GRASS;
+    }
+}
+
+// 道路
+for (let y = 88; y <= 90; y++) {
+    for (let x = 10; x <= 170; x++) {
+        MAP[y][x] = T.ROAD;
+    }
+}
+for (let y = 10; y <= 170; y++) {
+    for (let x = 88; x <= 90; x++) {
+        MAP[y][x] = T.ROAD;
+    }
+}
+
+// 添加建筑函数
+function addBuilding(x, y, w, h, name, suborgs = []) {
+    BUILDINGS.push({ x, y, w, h, name, suborgs });
+    for (let dy = 0; dy < h; dy++) {
+        for (let dx = 0; dx < w; dx++) {
+            if (y+dy < MAP_H && x+dx < MAP_W) {
+                MAP[y+dy][x+dx] = T.BUILDING;
+            }
+        }
+    }
+    LABELS.push({ name, suborgs, cx: x + w/2, cy: y });
+}
+
+// 添加总统府建筑及其下属机构
+addBuilding(80, 15, 20, 12, '总统府', []);
+addBuilding(65, 18, 12, 8, '总理办公室', ['总统秘书']);
+addBuilding(103, 18, 12, 8, '御谨大夫', ['副总理']);
+addBuilding(85, 32, 10, 6, '连任事务办公室', []);
+addBuilding(50, 15, 10, 8, '国家审计总署', []);
+addBuilding(50, 26, 10, 8, '反腐败独立委员会', []);
+addBuilding(50, 37, 10, 8, '紧急状态管理署', []);
+addBuilding(120, 15, 18, 10, '国家立法议会', ['300 席']);
+
+// 六大部
+addBuilding(130, 35, 18, 12, '行政大部', [
+    '精英委员会', '内政部',
+    '内政部：政务局', '内政部：人事局',
+    '内政部：档案局', '内政部：地方财政协调局',
+    '内政部：选举事务局', '积分与社会信用局',
+    '特区事务部：特区法律协调局',
+    '特区事务部：特区财政结算局',
+    '特区事务部：跨区争端预防局'
+]);
+
+addBuilding(30, 35, 18, 12, '财经大部', [
+    '财政部：积分管理局', '财政部：税率与积分换算局',
+    '财政部：国债与股份局', '财政部：预算管理局',
+    '财政部：税务局', '财政部：国库局',
+    '债务管理办公室',
+    '经济部：增长调控局', '经济部：福利浮动计算局',
+    '经济部：积分红利分配局', '经济部：产业政策局',
+    '经济部：贸易促进局', '经济部：物价监管局',
+    '统计局',
+    '中央银行：货币政策局', '中央银行：外汇政策局',
+    '中央银行：银行监管局', '国家积分清算中心'
+]);
+
+addBuilding(80, 60, 18, 12, '国安大部', [
+    '国防部：遣国护卫队', '国防部：国家情报局',
+    '外交部',
+    '公安部：消防局', '公安部：警察局',
+    '公安部：交通警察局', '公安部：网络安全保卫局',
+    '国家科学院：军事技术研究院',
+    '国家科学院：网络安全研究院',
+    '国家科学院：航天研究院',
+    '人口管理部：海关', '人口管理部：移民局',
+    '人口管理部：人口普查局',
+    '人口管理部：国民身份管理局',
+    '人口管理部：户籍流动管理局'
+]);
+
+addBuilding(30, 120, 18, 12, '民生大部', [
+    '卫生部：疾病控制局', '卫生部：医院管理局',
+    '卫生部：药品与医疗器械局',
+    '教育部：基础教育局', '教育部：高等教育局',
+    '教育部：职业教育局',
+    '劳动部：劳动关系局', '劳动部：就业服务局',
+    '劳动部：劳动监察局',
+    '福利部：积分福利结算局', '福利部：最低保障局',
+    '福利部：积分养老金局', '福利争议仲裁局',
+    '规划发展部：战略规划局', '规划发展部：区域发展局',
+    '规划发展部：重大项目局',
+    '交通部：公路局', '交通部：铁路局',
+    '交通部：民航局', '交通部：水运局',
+    '交通部：宇航局',
+    '公共部：供水管理局', '公共部：排水与环卫局',
+    '公共部：公共设施局', '公共部：能源管网局',
+    '公共部：区域供暖局', '公共部：长距离输水管网局'
+]);
+
+addBuilding(130, 120, 18, 12, '资源与环境大部', [
+    '环境部：生态治理局', '环境部：环境保护局',
+    '环境部：环境监测局',
+    '资源部：水利局', '资源部：矿业局',
+    '资源部：林业局', '资源部：农业局',
+    '资源部：牧业局', '资源部：能源局',
+    '资源部：土地局', '资源部：海洋局'
+]);
+
+addBuilding(80, 150, 18, 12, '司法大部', [
+    '法务部：监狱管理局', '法务部：律师与公证管理局',
+    '法务部：法制宣传局',
+    '最高法院：联邦事务法庭', '最高法院：国家审判法庭',
+    '国家调查部：重大贪腐调查局',
+    '国家调查部：有组织犯罪调查局',
+    '国家调查部：网络安全调查局',
+    '最高检察院：公诉局', '最高检察院：侦查监督局',
+    '最高检察院：审判监督局'
+]);
+
+// 玩家
+const player = {
+    x: 89 * TILE,
+    y: 89 * TILE,
+    speed: 200
+};
+
+// 摄像机
+const camera = { x: 0, y: 0 };
+
+// 缩放
+let zoom = 1;
+let targetZoom = 1;
+const minZoom = 0.3;
+const maxZoom = 2;
+const zoomSpeed = 0.15;
+
+// 键盘
+const keys = {};
+document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+// 鼠标滚轮缩放
+canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -zoomSpeed : zoomSpeed;
+    targetZoom = Math.max(minZoom, Math.min(maxZoom, targetZoom + delta));
+}, { passive: false });
+
+// 玩家精灵
+let playerSprite = null;
+if (typeof createPlayerSprite === 'function') {
+    playerSprite = createPlayerSprite();
+}
+
+let lastTime = Date.now();
+let lastRender = Date.now();
+
+function update() {
+    const now = Date.now();
+    const dt = Math.min((now - lastTime) / 1000, 0.05);
+    lastTime = now;
+    
+    // 平滑缩放
+    zoom += (targetZoom - zoom) * 0.15;
+    
+    let dx = 0, dy = 0;
+    if (keys.w || keys.arrowup) dy = -1;
+    if (keys.s || keys.arrowdown) dy = 1;
+    if (keys.a || keys.arrowleft) dx = -1;
+    if (keys.d || keys.arrowright) dx = 1;
+    
+    if (dx !== 0 || dy !== 0) {
+        const len = Math.sqrt(dx*dx + dy*dy);
+        dx /= len;
+        dy /= len;
+        player.x += dx * player.speed * dt;
+        player.y += dy * player.speed * dt;
+    }
+    
+    // 摄像机跟随（考虑缩放）
+    const viewW = canvas.width / zoom;
+    const viewH = canvas.height / zoom;
+    camera.x = player.x - viewW / 2;
+    camera.y = player.y - viewH / 2;
+    camera.x = Math.max(0, Math.min(camera.x, MAP_W * TILE - viewW));
+    camera.y = Math.max(0, Math.min(camera.y, MAP_H * TILE - viewH));
+    
+    debug.innerHTML = `位置：${Math.floor(player.x/TILE)},${Math.floor(player.y/TILE)} | 缩放：${(zoom * 100).toFixed(0)}% | 建筑：${BUILDINGS.length}`;
+}
+
+// 绘制现代简约风格总统府建筑
+function drawBuilding(b) {
+    const x = b.x * TILE - camera.x;
+    const y = b.y * TILE - camera.y;
+    const w = b.w * TILE;
+    const h = b.h * TILE;
+    
+    // ===== 建筑阴影 =====
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(x + 6, y + 6, w + 8, h + 20);
+    
+    // ===== 建筑主体 - 米白色石材 =====
+    const wallGrad = ctx.createLinearGradient(x, y, x + w, y + h);
+    wallGrad.addColorStop(0, '#f5f2eb');
+    wallGrad.addColorStop(0.5, '#e8e4dc');
+    wallGrad.addColorStop(1, '#dcd8d0');
+    ctx.fillStyle = wallGrad;
+    ctx.fillRect(x, y, w, h);
+    
+    // ===== 石材分缝（现代简约） =====
+    ctx.strokeStyle = 'rgba(160,150,140,0.2)';
+    ctx.lineWidth = 1;
+    const stoneSize = 16;
+    for (let sy = y; sy < y + h; sy += stoneSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, sy);
+        ctx.lineTo(x + w, sy);
+        ctx.stroke();
+    }
+    for (let sx = x; sx < x + w; sx += stoneSize) {
+        ctx.beginPath();
+        ctx.moveTo(sx, y);
+        ctx.lineTo(sx, y + h);
+        ctx.stroke();
+    }
+    
+    // ===== 深咖色金属边框 =====
+    ctx.strokeStyle = '#4a3a2a';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+    
+    // ===== 竖向浮雕柱体（强调威严） =====
+    const pillarCount = Math.floor(b.w / 3);
+    const pillarW = 8;
+    for (let i = 0; i < pillarCount; i++) {
+        const px = x + 12 + i * (w - 24) / (pillarCount > 1 ? pillarCount - 1 : 1);
+        if (pillarCount === 1) {
+            // 单个建筑时居中
+            const singlePx = x + w/2 - pillarW/2;
+            drawPillar(singlePx, y, pillarW, h);
+        } else {
+            drawPillar(px, y, pillarW, h);
+        }
+    }
+    
+    function drawPillar(px, py, pw, ph) {
+        // 柱体渐变
+        const pillarGrad = ctx.createLinearGradient(px, py, px + pw, py);
+        pillarGrad.addColorStop(0, '#d4c8b8');
+        pillarGrad.addColorStop(0.3, '#e8e0d8');
+        pillarGrad.addColorStop(0.7, '#e8e0d8');
+        pillarGrad.addColorStop(1, '#c4b8a8');
+        ctx.fillStyle = pillarGrad;
+        ctx.fillRect(px, py + 4, pw, ph - 8);
+        
+        // 柱体凹槽（竖向浮雕）
+        ctx.strokeStyle = 'rgba(100,90,80,0.15)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(px + pw/2, py + 8);
+        ctx.lineTo(px + pw/2, py + ph - 8);
+        ctx.stroke();
+    }
+    
+    // ===== 大面积落地双层隔音玻璃 =====
+    const windowRows = Math.floor(b.h / 4);
+    const windowCols = Math.floor(b.w / 4);
+    
+    for (let row = 0; row < windowRows; row++) {
+        for (let col = 0; col < windowCols; col++) {
+            const ww = (w - 24) / windowCols - 4;
+            const wh = (h - 16) / windowRows - 4;
+            const wx = x + 12 + col * ((w - 24) / windowCols);
+            const wy = y + 8 + row * ((h - 16) / windowRows);
+            
+            // 窗框（深咖色金属）
+            ctx.fillStyle = '#3a2a1a';
+            ctx.fillRect(wx - 3, wy - 3, ww + 6, wh + 6);
+            
+            // 双层玻璃渐变
+            const glassGrad = ctx.createLinearGradient(wx, wy, wx + ww, wy + wh);
+            glassGrad.addColorStop(0, '#a8c8e0');
+            glassGrad.addColorStop(0.3, '#b8d8f0');
+            glassGrad.addColorStop(0.7, '#c8e0f8');
+            glassGrad.addColorStop(1, '#a8c8e0');
+            ctx.fillStyle = glassGrad;
+            ctx.fillRect(wx, wy, ww, wh);
+            
+            // 玻璃反光（双层效果）
+            ctx.fillStyle = 'rgba(255,255,255,0.15)';
+            ctx.fillRect(wx + 2, wy + 2, ww - 4, wh * 0.4);
+            
+            // 窗格分隔（现代简约）
+            ctx.strokeStyle = '#5a4a3a';
+            ctx.lineWidth = 1.5;
+            // 竖框
+            ctx.beginPath();
+            ctx.moveTo(wx + ww/2, wy);
+            ctx.lineTo(wx + ww/2, wy + wh);
+            ctx.stroke();
+            // 横框
+            ctx.beginPath();
+            ctx.moveTo(wx, wy + wh/2);
+            ctx.lineTo(wx + ww, wy + wh/2);
+            ctx.stroke();
+        }
+    }
+    
+    // ===== 主入口（巨型双开实木鎏金大门） =====
+    const entranceW = Math.min(28, w * 0.4);
+    const entranceH = Math.min(24, h * 0.5);
+    const entranceX = x + w/2 - entranceW/2;
+    const entranceY = y + h - entranceH;
+    
+    // 门廊基座
+    ctx.fillStyle = '#2a1a0a';
+    ctx.fillRect(entranceX - 4, entranceY - 4, entranceW + 8, entranceH + 8);
+    
+    // 双开实木门
+    const doorGrad = ctx.createLinearGradient(entranceX, entranceY, entranceX + entranceW, entranceY);
+    doorGrad.addColorStop(0, '#4a2a10');
+    doorGrad.addColorStop(0.5, '#6a3a18');
+    doorGrad.addColorStop(1, '#4a2a10');
+    ctx.fillStyle = doorGrad;
+    ctx.fillRect(entranceX, entranceY, entranceW, entranceH);
+    
+    // 门缝
+    ctx.strokeStyle = '#2a1a0a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(entranceX + entranceW/2, entranceY);
+    ctx.lineTo(entranceX + entranceW/2, entranceY + entranceH);
+    ctx.stroke();
+    
+    // 鎏金门把手
+    ctx.fillStyle = '#d4af37';
+    ctx.beginPath();
+    ctx.arc(entranceX + entranceW/2 - 8, entranceY + entranceH/2, 3, 0, Math.PI * 2);
+    ctx.arc(entranceX + entranceW/2 + 8, entranceY + entranceH/2, 3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 门廊顶部装饰（微挑屋檐）
+    ctx.fillStyle = '#3a2a1a';
+    ctx.fillRect(entranceX - 8, entranceY - 12, entranceW + 16, 10);
+    // 鎏金装饰条
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(entranceX - 8, entranceY - 12, entranceW + 16, 3);
+    
+    // ===== 平顶屋顶（现代简约） =====
+    const roofH = 10;
+    const roofGrad = ctx.createLinearGradient(x, y - roofH, x, y);
+    roofGrad.addColorStop(0, '#2a1a0a');
+    roofGrad.addColorStop(0.5, '#3a2a1a');
+    roofGrad.addColorStop(1, '#4a3a2a');
+    ctx.fillStyle = roofGrad;
+    ctx.fillRect(x - 4, y - roofH, w + 8, roofH);
+    
+    // 屋顶金属包边
+    ctx.fillStyle = '#5a4a3a';
+    ctx.fillRect(x - 4, y - roofH, w + 8, 4);
+    
+    // ===== 总统府特殊装饰 - 中央穹顶（现代简化版） =====
+    if (b.name === '总统府') {
+        const domeX = x + w/2;
+        const domeY = y - roofH - 8;
+        const domeR = 18;
+        
+        // 穹顶基座（方形）
+        ctx.fillStyle = '#e8e4dc';
+        ctx.fillRect(domeX - 20, domeY - 8, 40, 16);
+        
+        // 穹顶主体（现代半球形）
+        const domeGrad = ctx.createRadialGradient(domeX - 6, domeY - 20, 2, domeX, domeY - 12, domeR);
+        domeGrad.addColorStop(0, '#f8f4e8');
+        domeGrad.addColorStop(0.4, '#d4af37');
+        domeGrad.addColorStop(1, '#a88428');
+        ctx.fillStyle = domeGrad;
+        ctx.beginPath();
+        ctx.arc(domeX, domeY - 12, domeR, Math.PI, 0, false);
+        ctx.fill();
+        
+        // 穹顶尖顶
+        ctx.fillStyle = '#ffd060';
+        ctx.beginPath();
+        ctx.moveTo(domeX, domeY - 38);
+        ctx.lineTo(domeX - 8, domeY - 30);
+        ctx.lineTo(domeX + 8, domeY - 30);
+        ctx.closePath();
+        ctx.fill();
+        
+        // 穹顶装饰环
+        ctx.strokeStyle = '#a88428';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(domeX, domeY - 12, domeR - 6, Math.PI, 0, false);
+        ctx.stroke();
+    }
+    
+    // ===== 大型建筑侧翼（对称布局） =====
+    if (b.w >= 16) {
+        // 左侧翼楼
+        ctx.fillStyle = '#dcd8d0';
+        ctx.fillRect(x - 6, y + 6, 6, h - 12);
+        ctx.fillStyle = '#3a2a1a';
+        ctx.fillRect(x - 8, y - 4, 10, 8);
+        
+        // 右侧翼楼
+        ctx.fillRect(x + w, y + 6, 6, h - 12);
+        ctx.fillRect(x + w - 2, y - 4, 10, 8);
+    }
+}
+
+// 绘制建筑标签
+function drawLabel(label) {
+    const lx = (label.cx * TILE) - camera.x;
+    const ly = (label.cy * TILE) - camera.y - 35;
+    
+    // 标签背景
+    ctx.font = 'bold 13px "Microsoft YaHei", Arial';
+    ctx.textAlign = 'center';
+    const nameWidth = ctx.measureText(label.name).width;
+    const bgWidth = nameWidth + 20;
+    const bgHeight = 26;
+    
+    // 阴影
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(lx - bgWidth/2 + 2, ly - bgHeight/2 + 2, bgWidth, bgHeight);
+    
+    // 背景渐变
+    const labelGrad = ctx.createLinearGradient(lx - bgWidth/2, ly - bgHeight/2, lx - bgWidth/2, ly + bgHeight/2);
+    labelGrad.addColorStop(0, 'rgba(30,40,50,0.95)');
+    labelGrad.addColorStop(1, 'rgba(20,30,40,0.95)');
+    ctx.fillStyle = labelGrad;
+    ctx.fillRect(lx - bgWidth/2, ly - bgHeight/2, bgWidth, bgHeight);
+    
+    // 金色边框
+    ctx.strokeStyle = '#d4af37';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(lx - bgWidth/2, ly - bgHeight/2, bgWidth, bgHeight);
+    
+    // 装饰角
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(lx - bgWidth/2 - 2, ly - bgHeight/2 - 2, 6, 6);
+    ctx.fillRect(lx + bgWidth/2 - 4, ly - bgHeight/2 - 2, 6, 6);
+    ctx.fillRect(lx - bgWidth/2 - 2, ly + bgHeight/2 - 4, 6, 6);
+    ctx.fillRect(lx + bgWidth/2 - 4, ly + bgHeight/2 - 4, 6, 6);
+    
+    // 主名称
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(label.name, lx, ly - 2);
+    
+    // 下属机构（如果有）
+    if (label.suborgs && label.suborgs.length > 0) {
+        const subY = ly + bgHeight/2 + 14;
+        ctx.font = '11px "Microsoft YaHei", Arial';
+        ctx.fillStyle = 'rgba(200,200,200,0.9)';
+        
+        // 只显示前几个，避免重叠
+        const displaySubs = label.suborgs.slice(0, 3);
+        for (let i = 0; i < displaySubs.length; i++) {
+            const subText = displaySubs[i];
+            ctx.fillText('└ ' + subText, lx, subY + i * 14);
+        }
+        
+        if (label.suborgs.length > 3) {
+            ctx.fillStyle = 'rgba(200,200,200,0.7)';
+            ctx.fillText(`... 等共${label.suborgs.length}个机构`, lx, subY + displaySubs.length * 14);
+        }
+    }
+}
+
+function draw() {
+    // 天空渐变
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    skyGrad.addColorStop(0, '#87CEEB');
+    skyGrad.addColorStop(0.6, '#b0d8f0');
+    skyGrad.addColorStop(1, '#d4e8f4');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // 应用缩放变换
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-canvas.width / 2, -canvas.height / 2);
+    
+    const startTX = Math.max(0, Math.floor(camera.x / TILE) - 2);
+    const endTX = Math.min(MAP_W - 1, Math.ceil((camera.x + canvas.width / zoom) / TILE) + 2);
+    const startTY = Math.max(0, Math.floor(camera.y / TILE) - 2);
+    const endTY = Math.min(MAP_H - 1, Math.ceil((camera.y + canvas.height / zoom) / TILE) + 2);
+    
+    // 绘制地面
+    for (let ty = startTY; ty <= endTY; ty++) {
+        for (let tx = startTX; tx <= endTX; tx++) {
+            const x = tx * TILE - camera.x;
+            const y = ty * TILE - camera.y;
+            
+            // 草地渐变
+            const grassType = (tx * 7 + ty * 13) % 4;
+            const grassColors = ['#6aaf4a', '#5ea042', '#76be52', '#52903a'];
+            ctx.fillStyle = grassColors[grassType];
+            ctx.fillRect(x, y, TILE, TILE);
+            
+            // 草地纹理
+            if ((tx + ty) % 3 === 0) {
+                ctx.fillStyle = 'rgba(0,0,0,0.05)';
+                ctx.fillRect(x + 8, y + 8, 8, 8);
+            }
+        }
+    }
+    
+    // 绘制道路
+    for (let ty = startTY; ty <= endTY; ty++) {
+        for (let tx = startTX; tx <= endTX; tx++) {
+            if (MAP[ty][tx] === T.ROAD) {
+                const x = tx * TILE - camera.x;
+                const y = ty * TILE - camera.y;
+                
+                // 道路
+                ctx.fillStyle = '#c8b898';
+                ctx.fillRect(x, y, TILE, TILE);
+                
+                // 道路边缘
+                ctx.strokeStyle = '#a89878';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(x + 0.5, y + 0.5, TILE - 1, TILE - 1);
+            }
+        }
+    }
+    
+    // 绘制建筑（按深度排序）
+    BUILDINGS.sort((a, b) => (a.y + a.h) - (b.y + b.h));
+    for (const b of BUILDINGS) {
+        drawBuilding(b);
+    }
+    
+    // 绘制建筑标签
+    for (const label of LABELS) {
+        drawLabel(label);
+    }
+    
+    // 玩家
+    const px = player.x - camera.x;
+    const py = player.y - camera.y;
+    if (playerSprite) {
+        const spr = playerSprite['DOWN_0'];
+        if (spr) {
+            ctx.drawImage(spr, px - 16, py - 24);
+        }
+    } else {
+        ctx.fillStyle = '#ff4444';
+        ctx.fillRect(px - 8, py - 16, 16, 32);
+    }
+    
+    // 恢复缩放变换
+    ctx.restore();
+}
+
+function gameLoop() {
+    const now = Date.now();
+    if (now - lastRender >= 16) { // 限制帧率，避免过度渲染
+        update();
+        draw();
+        lastRender = now;
+    }
+    requestAnimationFrame(gameLoop);
+}
+
+// 窗口大小调整
+window.addEventListener('resize', () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+});
+
+gameLoop();
+</script>
+</body>
+</html>
